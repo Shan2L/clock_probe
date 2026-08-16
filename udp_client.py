@@ -52,7 +52,7 @@ def read_tx_timestamp_ns(sock, timeout_seconds=1):
     raise RuntimeError("Timeout waiting for kernel TX timestamp")
 
 
-def measure_once(sock, sequence, args):
+def measure_once(sock, sequence, host, port):
 
     sample_monotonic_ns = time.monotonic_ns()
 
@@ -63,7 +63,7 @@ def measure_once(sock, sequence, args):
 
     request_data = json.dumps(request).encode("utf-8")
 
-    sock.sendto(request_data, (args.server, int(args.server_port)))
+    sock.sendto(request_data, (host, port))
     t1_ns = read_tx_timestamp_ns(sock)
 
     data, response_ancdata, flags, peer = sock.recvmsg(
@@ -116,11 +116,20 @@ def measure_once(sock, sequence, args):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--server", type=str, default="127.0.0.1")
-    parser.add_argument("--server-port", type=int, default=31990)
     parser.add_argument("--sample-count", type=int, default=10)
     parser.add_argument("--output", type=str, default="baseline.jsonl")
 
+
+    hostname = socket.gethostname()
+    print(f"Hostname: {hostname}")
+
+    port = 31990
+    if "cse-ai-6" in hostname:
+        host = "10.67.93.244"
+    elif "cse-ai-9" in hostname:
+        host = "10.67.91.123"
+
+    print(f"Host: {host}, Port: {port}")
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.settimeout(2)
@@ -147,7 +156,7 @@ if __name__ == "__main__":
                     buffering=1) as output_file:
             for sequence in range(1, args.sample_count+1):
                 sample = measure_once(
-                    sock, sequence, args
+                    sock, sequence, host, port
                 )
 
                 output_file.write(json.dumps(sample) + "\n")

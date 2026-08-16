@@ -53,7 +53,7 @@ def read_tx_timestamp_ns(sock, timeout_seconds=1):
     raise RuntimeError("Timeout waiting for kernel TX timestamp")
 
 
-def start_server(args):
+def start_server(host, port):
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
@@ -70,9 +70,9 @@ def start_server(args):
     )
 
 
-    sock.bind((args.host, args.port))
+    sock.bind((host, port))
 
-    print(f"UDP server listening on {args.host}: {args.port}")
+    print(f"UDP server listening on {host}: {port}")
     print(f"Timestamp structure size: {TIMESTAMP_STRUCT.size}")
 
     try:
@@ -126,11 +126,22 @@ def start_server(args):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--host", type=str, default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=31990)
-    args = parser.parse_args()
+    # parser = argparse.ArgumentParser()
+    # args = parser.parse_args()
 
-    start_server(args)
+    hostname = socket.gethostname()
+    print(f"Hostname: {hostname}")
+
+    port = 31990
+    if "cse-ai-6" in hostname:
+        host = "10.67.91.123"
+    elif "cse-ai-9" in hostname:
+        host = "10.67.93.244"
+
+    print(f"Host: {host}, Port: {port}")
+
+    start_server(host, port)
+
+
 
     
