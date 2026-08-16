@@ -28,7 +28,7 @@ if __name__== "__main__":
     parser.add_argument("input")
     parser.add_argument("--fraction", type=float, default=0.3)
     
-    args = parser.parse.args()
+    args = parser.parse_args()
 
     samples = load_sample(args.input)
 
