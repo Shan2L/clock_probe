@@ -261,15 +261,15 @@ if __name__== "__main__":
 
     print(
         f"Absolute residual p50: "
-        f"{ns_to_us(validation_residual_p50_ns):.3f} us"
+        f"{ns_to_us(residual_p50_ns):.3f} us"
     )
     print(
         f"Absolute residual p95: "
-        f"{ns_to_us(validation_residual_p95_ns):.3f} us"
+        f"{ns_to_us(residual_p95_ns):.3f} us"
     )
     print(
         f"Absolute residual max: "
-        f"{ns_to_us(validation_residual_max_ns):.3f} us"
+        f"{ns_to_us(residual_max_ns):.3f} us"
     )
 
     print(f"Training count: {len(training_samples)}")
@@ -282,13 +282,13 @@ if __name__== "__main__":
 
     print(
         f"Validation residual p50:  "
-        f"{ns_to_us(statistics.median(validation_residuals_ns)):.3f} us"
+        f"{ns_to_us(validation_residuals_ns):.3f} us"
     )
     print(
         f"Validation residual p95: "
-        f"{ns_to_us(statistics.quantiles(validation_residuals_ns, n=100, method='inclusive')[94]):.3f} us"
+        f"{ns_to_us(validation_residual_p95_ns):.3f} us"
     )
     print(
         f"Validation residual max: "
-        f"{ns_to_us(max(validation_residuals_ns)):.3f} us"
+        f"{ns_to_us(validation_residual_max_ns):.3f} us"
     )
