@@ -121,6 +121,15 @@ if __name__== "__main__":
         args.window_seconds,
     )
 
+    validation_samples = []
+    training_samples = []
+
+    for index, sample in enumerate(window_samples):
+        if (index + 1) % 5 == 0:
+            validation_samples.append(sample)
+        else:
+            training_samples.append(sample)
+
     window_offset_median = statistics.median(
         sample["offset_ns"]
         for sample in window_samples
@@ -132,8 +141,26 @@ if __name__== "__main__":
     )
 
     start_offset_ns, drift_ppm, residuals_ns = fit_drift(
-        window_samples
+        training_samples
     )
+
+    base_monotonic_ns = training_samples[0]["monotonic_ns"]
+    slope = drift_ppm / 1_000_000
+
+    validation_residuals_ns = []
+
+    for sample in validation_samples:
+        elapsed_ns = (
+            sample["monotonic_ns"] - base_monotonic_ns
+        )
+
+        predicted_offset_ns = start_offset_ns + slope * elapsed_ns
+
+        residual_ns = sample["offset_ns"] - predicted_offset_ns
+
+        validation_residuals_ns.append(residual_ns)
+
+
 
     absolute_residuals_ns = [
         abs(residual)
@@ -229,4 +256,25 @@ if __name__== "__main__":
     print(
         f"Absolute residual max: "
         f"{ns_to_us(residual_max_ns):.3f} us"
+    )
+
+    print(f"Training count: {len(training_samples)}")
+    print(f"Validation count: {len(validation_samples)}")
+
+    print(
+        f"Validation residual count: "
+        f"{len(validation_residuals_ns)}"
+    )
+
+    print(
+        f"Validation residual p50:  "
+        f"{ns_to_us(statistics.median(validation_residuals_ns)):.3f} us"
+    )
+    print(
+        f"Validation residual p95: "
+        f"{ns_to_us(statistics.quantiles(validation_residuals_ns, n=100, method='inclusive')[94]):.3f} us"
+    )
+    print(
+        f"Validation residual max: "
+        f"{ns_to_us(max(validation_residuals_ns)):.3f} us"
     )
