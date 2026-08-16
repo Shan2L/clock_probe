@@ -24,7 +24,7 @@ def ns_to_us(value):
 
 
 if __name__== "__main__":
-    parser = argparse.ArgummentParser()
+    parser = argparse.ArgumentParser()
     parser.add_argument("input")
     parser.add_argument("--fraction", type=float, default=0.3)
     
