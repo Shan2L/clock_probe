@@ -155,12 +155,26 @@ if __name__== "__main__":
         )
 
         predicted_offset_ns = start_offset_ns + slope * elapsed_ns
-
         residual_ns = sample["offset_ns"] - predicted_offset_ns
-
         validation_residuals_ns.append(residual_ns)
 
 
+    absolute_validation_residuals_ns = [
+        abs(residual)
+        for residual in validation_residuals_ns
+    ]
+
+    validation_residual_p50_ns = statistics.median(
+        absolute_validation_residuals_ns
+    )
+
+    validation_residual_p95_ns = statistics.quantiles(
+        absolute_validation_residuals_ns,
+        n=100,
+        method="inclusive",
+    )[94]
+
+    validation_residual_max_ns = max(absolute_validation_residuals_ns)
 
     absolute_residuals_ns = [
         abs(residual)
@@ -247,15 +261,15 @@ if __name__== "__main__":
 
     print(
         f"Absolute residual p50: "
-        f"{ns_to_us(residual_p50_ns):.3f} us"
+        f"{ns_to_us(validation_residual_p50_ns):.3f} us"
     )
     print(
         f"Absolute residual p95: "
-        f"{ns_to_us(residual_p95_ns):.3f} us"
+        f"{ns_to_us(validation_residual_p95_ns):.3f} us"
     )
     print(
         f"Absolute residual max: "
-        f"{ns_to_us(residual_max_ns):.3f} us"
+        f"{ns_to_us(validation_residual_max_ns):.3f} us"
     )
 
     print(f"Training count: {len(training_samples)}")
