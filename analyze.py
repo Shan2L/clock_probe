@@ -282,7 +282,7 @@ if __name__== "__main__":
 
     print(
         f"Validation residual p50:  "
-        f"{ns_to_us(validation_residuals_ns):.3f} us"
+        f"{ns_to_us(validation_residual_p50_ns):.3f} us"
     )
     print(
         f"Validation residual p95: "
