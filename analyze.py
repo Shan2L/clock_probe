@@ -56,6 +56,48 @@ def select_lowest_rtt_per_window(
         for index in sorted(best_by_window)
     ]
 
+
+def fit_drift(samples):
+    if len(samples) < 2:
+        raise ValueError(
+            "At least two samples are required to fit a drift"
+        )
+
+    base_monotonic_ns = samples[0]["monotonic_ns"]
+    x_values = [
+        sample["monotonic_ns"] - base_monotonic_ns
+        for sample in samples
+    ]
+
+    y_values = [
+        sample["offset_ms"]
+        for sample in samples
+    ]
+
+    x_mean = statistics.mean(x_values)
+    y_mean = statistics.mean(y_values)
+
+    numerator = sum(
+        (x - x_mean) * (y - y_mean)
+        for x, y in zip(x_values, y_values)
+    )
+
+    denominator = sum(
+        (x - x_mean) ** 2
+        for x in x_values
+    )
+
+    if denominator == 0:
+        raise ValueError("Samples have no time span")
+
+    slope = numerator / denominator
+
+    intercept_ns = y_mean - slope * x_mean
+    drift_ppm = slope * 1_000_000
+
+    return intercept_ns, drift_ppm
+
+
 if __name__== "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("input")
@@ -82,6 +124,10 @@ if __name__== "__main__":
     window_rtt_median = statistics.median(
         sample["rtt_ns"]
         for sample in window_samples
+    )
+
+    start_offset_ns, drift_ppm = fit_drift(
+        window_samples
     )
 
     low_count = max(
@@ -139,4 +185,13 @@ if __name__== "__main__":
     print(
         f"Windowed RTT median: "
         f"{ns_to_us(window_rtt_median)} us"
+    )
+
+    print(
+        f"Fitted start offset: "
+        f"{ns_to_us(start_offset_ns):.3f} us"
+    )
+    print(
+        f"Fitted drift:"
+        f"{drift_ppm:.3f} ppm"
     )
