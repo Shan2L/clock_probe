@@ -70,7 +70,7 @@ def fit_drift(samples):
     ]
 
     y_values = [
-        sample["offset_ms"]
+        sample["offset_ns"]
         for sample in samples
     ]
 
