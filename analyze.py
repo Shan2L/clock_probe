@@ -95,7 +95,12 @@ def fit_drift(samples):
     intercept_ns = y_mean - slope * x_mean
     drift_ppm = slope * 1_000_000
 
-    return intercept_ns, drift_ppm
+    residuals_ns = [
+        y - (intercept_ns + slope * x)
+        for x, y in zip(x_values, y_values)
+    ]
+
+    return intercept_ns, drift_ppm, residuals_ns
 
 
 if __name__== "__main__":
@@ -126,9 +131,26 @@ if __name__== "__main__":
         for sample in window_samples
     )
 
-    start_offset_ns, drift_ppm = fit_drift(
+    start_offset_ns, drift_ppm, residuals_ns = fit_drift(
         window_samples
     )
+
+    absolute_residuals_ns = [
+        abs(residual)
+        for residual in residuals_ns
+    ]
+
+    residual_p50_ns = statistics.median(
+        absolute_residuals_ns
+    )
+
+    residual_p95_ns = statistics.quantiles(
+        absolute_residuals_ns,
+        n=100,
+        method="inclusive",
+    )[94]
+
+    residual_max_ns = max(absolute_residuals_ns)
 
     low_count = max(
         1,
@@ -194,4 +216,17 @@ if __name__== "__main__":
     print(
         f"Fitted drift:"
         f"{drift_ppm:.3f} ppm"
+    )
+
+    print(
+        f"Absolute residual p50: "
+        f"{ns_to_us(residual_p50_ns):.3f} us"
+    )
+    print(
+        f"Absolute residual p95: "
+        f"{ns_to_us(residual_p95_ns):.3f} us"
+    )
+    print(
+        f"Absolute residual max: "
+        f"{ns_to_us(residual_max_ns):.3f} us"
     )
