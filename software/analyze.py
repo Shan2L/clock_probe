@@ -556,7 +556,7 @@ if __name__== "__main__":
             f"elapsed=[{worst['elapsed_seconds']:.1f}]s "
             f"residual={ns_to_us(worst['absolute_residual_ns']):.3f}us "
             f"rtt={ns_to_us(worst['rtt_ns']):.3f}us "
-            f"selected_count=[{worst['selected_count']} "
+            f"selected_count={worst['selected_count']} "
             f"window={worst['window_index']}"
         )
 
