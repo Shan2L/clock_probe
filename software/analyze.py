@@ -252,6 +252,8 @@ if __name__== "__main__":
             method='inclusive'
         )[94]
 
+        segment_passed =  segment_validation_p95_ns < 20_000
+
         segment_validation_max_ns = max(
             segment_validation_residual_ns)
 
@@ -274,9 +276,17 @@ if __name__== "__main__":
             ),
             "validation_p95_ns": segment_validation_p95_ns,
             "validation_max_ns": segment_validation_max_ns,
+            "passed": segment_passed,
 
         })
 
+    passed_segments = [
+        report for report in segment_reports if report['passed']
+    ]
+    failed_segments = [
+        report for report in segment_reports if not report['passed']
+    ]
+    session_passed = len(failed_segments) == 0
 
     offset_jumps = []
     start_monotonic_ns = window_samples[0]["monotonic_ns"]
@@ -502,4 +512,22 @@ if __name__== "__main__":
             f"train_max={ns_to_us(report['residual_max_ns']):+.3f}us"
             f"valid_p95={ns_to_us(report['validation_p95_ns']):+.3f}us "
             f"valid_max={ns_to_us(report['validation_max_ns']):+.3f}us"
+            f"status={'Pass' if report['passed'] else 'Fail'}"
+        )
+        print(
+            f"Piecewise passed segments: "
+            f"{len(passed_segments)} / {len(segment_reports)}"
+        )
+
+        print(
+            f"Failed segment index: "
+            f"{[
+                report['segment_index']
+                for report in failed_segments
+            ]}"
+        )
+
+        print(
+            f"Sesstion status: "
+            f"{f'PASS' if session_passed else 'DEGRADED'}"
         )
