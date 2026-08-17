@@ -55,6 +55,22 @@ def select_lowest_rtt_per_window(
             [],
         ).append(sample)
 
+    window_minimum_rtts_ns = [
+        min(
+            sample['rtt_ns']
+            for sample in candidates
+        )
+        for candidates in samples_by_window.values()
+    ]
+
+    baseline_window_min_rtt_ns = statistics.median(
+        window_minimum_rtts_ns
+    )
+
+    maximum_healthy_window_min_rtt_ns = (
+        baseline_window_min_rtt_ns + 100_000
+    )
+
     window_samples = []
 
     for window_index in sorted(samples_by_window):
@@ -66,6 +82,10 @@ def select_lowest_rtt_per_window(
         )
 
         minimum_rtt_ns = ordered_candidates[0]["rtt_ns"]
+        if (
+            minimum_rtt_ns > maximum_healthy_window_min_rtt_ns
+        ):
+            continue
 
         maximum_allowed_rtt_ns = (
             minimum_rtt_ns + int(rtt_slack_us * 1_000)
