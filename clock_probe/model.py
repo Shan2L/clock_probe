@@ -202,6 +202,7 @@ def _build_segment(
     segment_index: int,
     samples: Sequence[dict[str, float]],
     config: ModelConfig,
+    expected_windows: int,
 ) -> dict[str, Any]:
     training, validation = _split_train_validation(
         samples,
@@ -210,11 +211,7 @@ def _build_segment(
     fit = _fit_affine(training)
     training_residuals = _residuals_us(training, fit)
     validation_residuals = _residuals_us(validation, fit)
-    expected_windows = max(
-        1,
-        round(config.segment_seconds / config.window_seconds),
-    )
-    coverage = min(1.0, len(samples) / expected_windows)
+    coverage = min(1.0, len(samples) / max(1, expected_windows))
     validation_p95_us = _percentile(validation_residuals, 0.95)
     passed = (
         validation_p95_us <= config.max_validation_p95_us
@@ -233,6 +230,7 @@ def _build_segment(
         "sample_count": len(samples),
         "training_sample_count": len(training),
         "validation_sample_count": len(validation),
+        "expected_window_count": expected_windows,
         "coverage": coverage,
         "median_rtt_us": median_rtt_us,
         "training_p95_error_us": _percentile(training_residuals, 0.95),
@@ -263,6 +261,7 @@ def build_piecewise_model(
         )
 
     origin_ns = int(window_health["origin_monotonic_ns"])
+    window_ns = int(selected_config.window_seconds * 1_000_000_000)
     segment_ns = int(selected_config.segment_seconds * 1_000_000_000)
     grouped: dict[int, list[dict[str, float]]] = {}
     for sample in representatives:
@@ -271,20 +270,40 @@ def build_piecewise_model(
         ) // segment_ns
         grouped.setdefault(segment_index, []).append(sample)
 
+    last_window_index = max(
+        (int(sample["monotonic_ns"]) - origin_ns) // window_ns
+        for sample in samples
+    )
+    expected_windows_by_segment: dict[int, int] = {}
+    for window_index in range(last_window_index + 1):
+        segment_index = (window_index * window_ns) // segment_ns
+        expected_windows_by_segment[segment_index] = (
+            expected_windows_by_segment.get(segment_index, 0) + 1
+        )
+
     segments: list[dict[str, Any]] = []
     skipped_segments: list[dict[str, Any]] = []
-    for segment_index, segment_samples in sorted(grouped.items()):
+    for segment_index, expected_windows in sorted(
+        expected_windows_by_segment.items()
+    ):
+        segment_samples = grouped.get(segment_index, [])
         if len(segment_samples) < selected_config.min_segment_samples:
             skipped_segments.append(
                 {
                     "segment_index": segment_index,
                     "healthy_window_count": len(segment_samples),
+                    "expected_window_count": expected_windows,
                     "reason": "too_few_healthy_windows",
                 }
             )
             continue
         segments.append(
-            _build_segment(segment_index, segment_samples, selected_config)
+            _build_segment(
+                segment_index,
+                segment_samples,
+                selected_config,
+                expected_windows,
+            )
         )
 
     if not segments:

@@ -76,6 +76,22 @@ class PiecewiseModelTest(unittest.TestCase):
         self.assertGreaterEqual(model["health"]["rejected_window_count"], 1)
         self.assertEqual(model["status"], "PASS")
 
+    def test_partial_trailing_segment_uses_observed_duration(self) -> None:
+        model = build_piecewise_model(
+            synthetic_samples(duration_seconds=138),
+            source={"hostname": "worker-a"},
+            reference={"hostname": "head"},
+        )
+
+        trailing_segment = model["segments"][-1]
+        self.assertEqual(model["status"], "PASS")
+        self.assertEqual(len(model["segments"]), 5)
+        self.assertEqual(trailing_segment["segment_index"], 4)
+        self.assertEqual(trailing_segment["expected_window_count"], 18)
+        self.assertEqual(trailing_segment["sample_count"], 18)
+        self.assertEqual(trailing_segment["coverage"], 1.0)
+        self.assertEqual(trailing_segment["status"], "PASS")
+
     def test_refuses_timestamp_outside_coverage(self) -> None:
         model = build_piecewise_model(
             synthetic_samples(),
