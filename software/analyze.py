@@ -170,6 +170,29 @@ if __name__== "__main__":
         args.rtt_slack_us,
     )
 
+    offset_jumps = []
+    start_monotonic_ns = window_samples[0]["monotonic_ns"]
+
+    for previous, current in zip(
+        window_samples,
+        window_samples[1:],
+    ):
+        elapsed_seconds = (current["monotonic_ns"] - start_monotonic_ns) / 1_000_000_000
+        interval_seconds = (current["monotonic_ns"] - previous["monotonic_ns"]) / 1_000_000_000
+        offset_jump_ns = (current["offset_ns"] - previous["offset_ns"]) / 1_000
+        offset_jumps.append({
+            "elapsed_seconds": elapsed_seconds,
+            "interval_seconds": interval_seconds,
+            "offset_jump_ns": offset_jump_ns,
+        })
+
+    largest_jumps = sorted(
+        offset_jumps,
+        key=lambda item: abs(item["offset_jump_us"]),
+        reverse=True,
+    )[:5]
+
+
     validation_samples = []
     training_samples = []
 
@@ -341,3 +364,11 @@ if __name__== "__main__":
         f"Validation residual max: "
         f"{ns_to_us(validation_residual_max_ns):.3f} us"
     )
+
+    print("Largest consecutive offset jumps: ")
+    for jump in largest_jumps:
+        print(
+            f" at={jump['elapsed_seconds']:.1f}s "
+            f"interval={jump['interval_seconds']:.1f}s "
+            f"jump={jump['offset_jump_ns']:+.3f}us "
+        )
