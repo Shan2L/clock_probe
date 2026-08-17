@@ -86,7 +86,7 @@ def select_lowest_rtt_per_window(
         window_samples.append(representative)
 
 
-        return window_samples
+    return window_samples
 
 
 def fit_drift(samples):
