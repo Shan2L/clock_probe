@@ -1,0 +1,7 @@
+.git/
+.venv/
+__pycache__/
+*.pyc
+*.jsonl
+*.log
+clock-session*.json

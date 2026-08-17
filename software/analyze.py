@@ -115,6 +115,12 @@ def select_lowest_rtt_per_window(
                 sample["rtt_ns"]
                 for sample in selected
             ),
+            "source_realtime_ns": int(
+                statistics.median(
+                    sample["t1_ns"]
+                    for sample in selected
+                )
+            )
         }
 
         window_samples.append(representative)
@@ -295,7 +301,13 @@ if __name__== "__main__":
             "validation_max_ns": segment_validation_max_ns,
             "passed": segment_passed,
             "worst_validation": worst_validation,
-
+            "valid_from_monotonic_ns": segment_samples[0]["monotonic_ns"],
+            "valid_to_monotonic_ns": segment_samples[-1]["monotonic_ns"],
+            "valid_from_realtime_ns": segment_samples[0]["source_realtime_ns"],
+            "valid_to_realtime_ns": segment_samples[-1]["source_realtime_ns"],
+            "base_monotonic_ms": segment_training_samples[0]["monotonic_ns"],
+            "base_realtime_ms": segment_training_samples[0]["source_realtime_ns"],
+            "offset_at_base_ns": segment_offset_ns,
         })
 
     passed_segments = [

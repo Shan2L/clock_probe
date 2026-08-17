@@ -1,9 +1,19 @@
 [project]
 name = "clock-probe"
 version = "0.1.0"
-description = "Add your description here"
+description = "Cross-node software clock calibration for Ray GPU clusters"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "pylint>=4.0.7",
 ]
+
+[project.optional-dependencies]
+ray = ["ray"]
+
+[project.scripts]
+clock-probe-ray = "clock_probe.ray_agent:main"
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
