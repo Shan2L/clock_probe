@@ -247,7 +247,7 @@ if __name__== "__main__":
             segment_validation_residual_ns.append(abs(residual_ns))
 
         segment_validation_p95_ns = statistics.quantiles(
-            segment_validation_residuals_ns,
+            segment_validation_residual_ns,
             n=100,
             method='inclusive'
         )[94]
