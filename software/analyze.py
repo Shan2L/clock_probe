@@ -28,6 +28,7 @@ def select_lowest_rtt_per_window(
     samples,
     window_seconds,
     samples_per_window,
+    rtt_slack_us,
 ):
     if window_seconds <= 0:
         raise ValueError("Window seconds must be positive")
@@ -67,7 +68,7 @@ def select_lowest_rtt_per_window(
         minimum_rtt_ns = ordered_candidates[0]["rtt_ns"]
 
         maximum_allowed_rtt_ns = (
-            minimum_rtt_ns + 20_000
+            minimum_rtt_ns + int(rtt_slack_us * 1_000)
         )
 
         selected = [
@@ -153,6 +154,7 @@ if __name__== "__main__":
     parser.add_argument("--fraction", type=float, default=0.3)
     parser.add_argument("--window-seconds", type=float, default=1.0)
     parser.add_argument("--samples-per-window", type=int, default=3)
+    parser.add_argument("--rtt-slack-us", type=float, default=20.0)
     
     args = parser.parse_args()
 
@@ -165,6 +167,7 @@ if __name__== "__main__":
         samples,
         args.window_seconds,
         args.samples_per_window,
+        args.rtt_slack_us,
     )
 
     validation_samples = []
