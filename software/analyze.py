@@ -59,10 +59,22 @@ def select_lowest_rtt_per_window(
     for window_index in sorted(samples_by_window):
         candidates = samples_by_window[window_index]
 
-        selected = sorted(
+        ordered_candidates = sorted(
             candidates,
             key=lambda sample: sample["rtt_ns"],
-        )[:samples_per_window]
+        )
+
+        minimum_rtt_ns = ordered_candidates[0]["rtt_ns"]
+
+        maximum_allowed_rtt_ns = (
+            minimum_rtt_ns + 20_000
+        )
+
+        selected = [
+            sample
+            for sample in ordered_candidates
+            if sample["rtt_ns"] <= maximum_allowed_rtt_ns
+        ][:samples_per_window]
 
         representative = {
             "window_index": window_index,
