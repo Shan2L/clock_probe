@@ -99,7 +99,7 @@ def measure_once(sock, sequence, host, port):
     t2_ns, t3_ns = follow_up["t2_ns"], follow_up["t3_ns"]
 
     offset_ns = ((t2_ns - t1_ns) + (t3_ns - t4_ns))/2
-    rtt_ns = ((t4_ns - t1_ns) - (t3_ns - t2_ns))
+    rtt_ns = (t4_ns - t1_ns) - (t3_ns - t2_ns)
 
     return {
         "sequence": sequence,
@@ -162,9 +162,9 @@ if __name__ == "__main__":
                 output_file.write(json.dumps(sample) + "\n")
 
                 print(
-                    f"sequence={sample["sequence"]:03d} "
-                    f"offset={sample["offset_ns"] / 1_000:.3f} us "
-                    f"rtt={sample["rtt_ns"] / 1_000:.3f} us"
+                    f"sequence={sample['sequence']:03d} "
+                    f"offset={sample['offset_ns'] / 1_000:.3f} us "
+                    f"rtt={sample['rtt_ns'] / 1_000:.3f} us"
                 )
                 if sequence < args.sample_count:
                     time.sleep(0.1)

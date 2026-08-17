@@ -27,9 +27,14 @@ def ns_to_us(value):
 def select_lowest_rtt_per_window(
     samples,
     window_seconds,
+    samples_per_window,
 ):
     if window_seconds <= 0:
         raise ValueError("Window seconds must be positive")
+
+    if samples_per_window <= 0:
+        raise ValueError("Samples per windows must be positive")
+
 
     window_ns = int(window_seconds * 1_000_000_000)
 
@@ -38,23 +43,50 @@ def select_lowest_rtt_per_window(
         for sample in samples
     )
 
-    best_by_window = {}
+    samples_by_window = {}
 
     for sample in samples:
         elapsed_ns = sample["monotonic_ns"] - start_ns
         window_index = elapsed_ns // window_ns
 
-        current_best = best_by_window.get(window_index)
-        if (
-            current_best is None
-            or sample["rtt_ns"] < current_best["rtt_ns"]
-        ):
-            best_by_window[window_index] = sample
+        samples_by_window.setdefault(
+            window_index,
+            [],
+        ).append(sample)
 
-    return [
-        best_by_window[index]
-        for index in sorted(best_by_window)
-    ]
+    window_samples = []
+
+    for window_index in sorted(samples_by_window):
+        candidates = samples_by_window[window_index]
+
+        selected = sorted(
+            candidates,
+            key=lambda sample: sample["rtt_ns"],
+        )[:samples_per_window]
+
+        representative = {
+            "window_index": window_index,
+            "selected_count": len(selected),
+            "monotonic_ns": int(
+                statistics.median(
+                    sample["monotonic_ns"]
+                    for sample in selected
+                )
+            ),
+            "offset_ns": statistics.median(
+                sample["offset_ns"]
+                for sample in selected
+            ),
+            "rtt_ns": statistics.median(
+                sample["rtt_ns"]
+                for sample in selected
+            ),
+        }
+
+        window_samples.append(representative)
+
+
+        return window_samples
 
 
 def fit_drift(samples):
@@ -108,6 +140,7 @@ if __name__== "__main__":
     parser.add_argument("input")
     parser.add_argument("--fraction", type=float, default=0.3)
     parser.add_argument("--window-seconds", type=float, default=1.0)
+    parser.add_argument("--samples-per-window", type=int, default=3)
     
     args = parser.parse_args()
 
@@ -119,6 +152,7 @@ if __name__== "__main__":
     window_samples = select_lowest_rtt_per_window(
         samples,
         args.window_seconds,
+        args.samples_per_window,
     )
 
     validation_samples = []
