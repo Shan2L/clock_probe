@@ -184,6 +184,10 @@ if __name__== "__main__":
             "elapsed_seconds": elapsed_seconds,
             "interval_seconds": interval_seconds,
             "offset_jump_us": offset_jump_us,
+            "previous_rtt_us": previous["rtt_ns"] / 1_000,
+            "current_rtt_us": current["rtt_ns"] / 1_000,
+            "previous_selected_count": previous["selected_count"],
+            "current_selected_count": current["selected_count"],
         })
 
     largest_jumps = sorted(
@@ -371,4 +375,8 @@ if __name__== "__main__":
             f" at={jump['elapsed_seconds']:.1f}s "
             f"interval={jump['interval_seconds']:.1f}s "
             f"jump={jump['offset_jump_us']:+.3f}us "
+            f"rtt={jump['previous_rtt_us']:.3f}"
+            f"->{jump['previous_selected_count']}"
+            f"selected={jump['previous_selected_count']}"
+            f"->{jump['current_selected_count']}"
         )
