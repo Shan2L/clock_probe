@@ -29,6 +29,7 @@ def select_lowest_rtt_per_window(
     window_seconds,
     samples_per_window,
     rtt_slack_us,
+    max_window_rtt_excess_us,
 ):
     if window_seconds <= 0:
         raise ValueError("Window seconds must be positive")
@@ -68,7 +69,7 @@ def select_lowest_rtt_per_window(
     )
 
     maximum_healthy_window_min_rtt_ns = (
-        baseline_window_min_rtt_ns + 100_000
+        baseline_window_min_rtt_ns + int(max_window_rtt_excess_us * 1_000)
     )
 
     window_samples = []
@@ -176,6 +177,7 @@ if __name__== "__main__":
     parser.add_argument("--samples-per-window", type=int, default=3)
     parser.add_argument("--rtt-slack-us", type=float, default=20.0)
     parser.add_argument("--segment-seconds", type=float, default=60.0)
+    parser.add_argument("--max-window-rtt-excess-us", type=float, default=50.0)
     
     args = parser.parse_args()
 
@@ -189,6 +191,7 @@ if __name__== "__main__":
         args.window_seconds,
         args.samples_per_window,
         args.rtt_slack_us,
+        args.max_window_rtt_excess_us
     )
 
     segment_seconds = args.segment_seconds
