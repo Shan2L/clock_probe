@@ -13,7 +13,11 @@ ray = ["ray"]
 
 [project.scripts]
 clock-probe-ray = "clock_probe.ray_agent:main"
+clock-probe-align = "clock_probe.trace_align:main"
 
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["clock_probe*"]

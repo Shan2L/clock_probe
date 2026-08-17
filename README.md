@@ -132,3 +132,26 @@ head_timestamp = source_timestamp + predicted_offset
 ```
 
 模型不会修改系统时钟。它只用于离线 Trace 时间轴转换。
+
+## 对齐 PyTorch/vLLM Trace
+
+校准和 profiling 必须来自同一时间段。分别转换 Head 和 Worker Trace：
+
+```bash
+clock-probe-align \
+  --trace trace_rank0.json \
+  --clock-session profile-clock-session.json \
+  --source-node cse-ai-9 \
+  --output trace_rank0.aligned.json
+
+clock-probe-align \
+  --trace trace_rank4.json \
+  --clock-session profile-clock-session.json \
+  --source-node cse-ai-6 \
+  --output trace_rank4.aligned.json
+```
+
+转换器逐行处理超大 Trace，不会把完整 JSON 加载到内存。输出统一设置
+`baseTimeNanoseconds=0`，事件 `ts` 为对齐到 Head 后的 epoch 微秒，因此不同节点
+输出可以使用同一个时间基准合并。若事件超出模型覆盖范围，转换会失败并删除不完整
+输出，不会静默外推。
