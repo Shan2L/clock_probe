@@ -208,19 +208,53 @@ if __name__== "__main__":
     for segment_index in sorted(samples_by_segment):
         segment_samples = samples_by_segment[segment_index]
 
-        if len(segment_samples) < 3:
+        if len(segment_samples) < 10:
+            continue
+        
+        segment_training_samples = []
+        segment_validation_samples = []
+
+        for index, sample in enumerate(segment_samples):
+            if (index + 1) % 5 == 0:
+                segment_validation_samples.append(sample)
+            else:
+                segment_training_samples.append(sample)
+
+        if (
+            len(segment_training_samples) < 2
+            or len(segment_validation_samples) < 2
+        ):
             continue
 
         (
             segment_offset_ns,
             segment_drift_ppm,
             segment_residuals_ns,
-        ) = fit_drift(segment_samples)
+        ) = fit_drift(segment_training_samples)
 
         absolute_segment_residuals_ns = [
             abs(value)
             for value in segment_residuals_ns
         ]
+
+        segment_base_monotonic_ns = segment_training_samples[0]["monotonic_ns"]
+        segment_slope = segment_drift_ppm / 1_000_000
+        segment_validation_residual_ns = []
+        for sample in segment_validation_samples:
+            elapsed_ns = sample["monotonic_ns"] - segment_base_monotonic_ns
+            predicted_offset_ns = segment_offset_ns + segment_slope * elapsed_ns
+            residual_ns = sample["offset_ns"] - predicted_offset_ns
+            segment_validation_residual_ns.append(abs(residual_ns))
+
+        segment_validation_p95_ns = statistics.quantiles(
+            segment_validation_residuals_ns,
+            n=100,
+            method='inclusive'
+        )[94]
+
+        segment_validation_max_ns = max(
+            segment_validation_residual_ns)
+
 
         segment_p95_ns = statistics.quantiles(
             absolute_segment_residuals_ns,
@@ -230,12 +264,17 @@ if __name__== "__main__":
         segment_reports.append({
             "segment_index": segment_index,
             "sample_count": len(segment_samples),
+            "training_count": len(segment_training_samples),
+            "validation_count": len(segment_validation_samples),
             "start_offset_ns": segment_offset_ns,
             "drift_ppm": segment_drift_ppm,
             "residual_p95_ns": segment_p95_ns,
             "residual_max_ns": max(
                 absolute_segment_residuals_ns
             ),
+            "validation_p95_ns": segment_validation_p95_ns,
+            "validation_max_ns": segment_validation_max_ns,
+
         })
 
 
@@ -455,8 +494,12 @@ if __name__== "__main__":
         print(
             f"segment={report['segment_index']: 02d} "
             f"count={report['sample_count']: 03d} "
+            f"train={report['training_count']: 03d} "
+            f"valid={report['validation_count']: 03d} "
             f"offset={ns_to_us(report['start_offset_ns']):+.3f}us "
             f"drift={report['drift_ppm']:.3f}ppm "
-            f"p95={ns_to_us(report['residual_p95_ns']):+.3f}us "
-            f"max={ns_to_us(report['residual_max_ns']):+.3f}us"
+            f"train_p95={ns_to_us(report['residual_p95_ns']):+.3f}us "
+            f"train_max={ns_to_us(report['residual_max_ns']):+.3f}us"
+            f"valid_p95={ns_to_us(report['validation_p95_ns']):+.3f}us "
+            f"valid_max={ns_to_us(report['validation_max_ns']):+.3f}us"
         )
