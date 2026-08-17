@@ -190,6 +190,54 @@ if __name__== "__main__":
         args.rtt_slack_us,
     )
 
+    segment_seconds = 60
+    segment_ns = segment_seconds * 1_000_000_000
+    segment_start_ns = window_samples[0]["monotonic_ns"]
+    samples_by_segment = {}
+    for sample in window_samples:
+        elapsed_ns = (sample["monotonic_ns"] - segment_start_ns)
+        segment_index = elapsed_ns // segment_ns
+        samples_by_segment.setdefault(
+            segment_index,
+            [],
+        ).append(sample)
+
+    segment_reports = []
+
+    for segment_index in sorted(samples_by_segment):
+        segment_samples = samples_by_segment[segment_index]
+
+        if len(segment_samples) < 3:
+            continue
+
+        (
+            segment_offset_ns,
+            segment_drift_ppm,
+            segment_residuals_ns,
+        ) = fit_drift(segment_samples)
+
+        absolute_segment_residuals_ns = [
+            abs(value)
+            for value in segment_residuals_ns
+        ]
+
+        segment_p95_ns = statistics.quantiles(
+            absolute_segment_residuals_ns,
+            n=100,
+            method="inclusive"
+        )[94]
+        segment_reports.append({
+            "segment_index": segment_index,
+            "sample_count": len(segment_samples),
+            "start_offset_ns": segment_offset_ns,
+            "drift_ppm": segment_drift_ppm,
+            "residual_p95_ns": segment_p95_ns,
+            "residual_max_ns": max(
+                absolute_segment_residuals_ns
+            ),
+        })
+
+
     offset_jumps = []
     start_monotonic_ns = window_samples[0]["monotonic_ns"]
 
@@ -399,4 +447,15 @@ if __name__== "__main__":
             f"->{jump['current_rtt_us']:.3f} us"
             f"selected={jump['previous_selected_count']}"
             f"->{jump['current_selected_count']}"
+        )
+
+    print("Piecewise 60-second segment:")
+    for report in segment_reports:
+        print(
+            f"segment={report['segment_index']: 02d} "
+            f"count={report['sample_count']: 03d} "
+            f"offset={ns_to_us(report['start_offset_ns']):+.3f}us "
+            f"drift={report['drift_ppm']:.3f}ppm "
+            f"p95={ns_to_us(report['residual_p95_ns']):+.3f}us "
+            f"max={ns_to_us(report['residual_max_ns']):+.3f}us"
         )
