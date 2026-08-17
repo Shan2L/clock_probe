@@ -376,7 +376,7 @@ if __name__== "__main__":
             f"interval={jump['interval_seconds']:.1f}s "
             f"jump={jump['offset_jump_us']:+.3f}us "
             f"rtt={jump['previous_rtt_us']:.3f}"
-            f"->{jump['previous_selected_count']}"
+            f"->{jump['current_rtt_us']:.3f} us"
             f"selected={jump['previous_selected_count']}"
             f"->{jump['current_selected_count']}"
         )
