@@ -175,6 +175,7 @@ if __name__== "__main__":
     parser.add_argument("--window-seconds", type=float, default=1.0)
     parser.add_argument("--samples-per-window", type=int, default=3)
     parser.add_argument("--rtt-slack-us", type=float, default=20.0)
+    parser.add_argument("--segment-seconds", type=float, default=60.0)
     
     args = parser.parse_args()
 
@@ -190,8 +191,8 @@ if __name__== "__main__":
         args.rtt_slack_us,
     )
 
-    segment_seconds = 60
-    segment_ns = segment_seconds * 1_000_000_000
+    segment_seconds = args.segment_seconds
+    segment_ns = int(segment_seconds * 1_000_000_000)
     segment_start_ns = window_samples[0]["monotonic_ns"]
     samples_by_segment = {}
     for sample in window_samples:
@@ -449,7 +450,7 @@ if __name__== "__main__":
             f"->{jump['current_selected_count']}"
         )
 
-    print("Piecewise 60-second segment:")
+    print(f"Piecewise {segment_seconds}-second segment:")
     for report in segment_reports:
         print(
             f"segment={report['segment_index']: 02d} "
