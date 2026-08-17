@@ -240,11 +240,25 @@ if __name__== "__main__":
         segment_base_monotonic_ns = segment_training_samples[0]["monotonic_ns"]
         segment_slope = segment_drift_ppm / 1_000_000
         segment_validation_residual_ns = []
+        segment_validation_details = []
         for sample in segment_validation_samples:
             elapsed_ns = sample["monotonic_ns"] - segment_base_monotonic_ns
             predicted_offset_ns = segment_offset_ns + segment_slope * elapsed_ns
             residual_ns = sample["offset_ns"] - predicted_offset_ns
-            segment_validation_residual_ns.append(abs(residual_ns))
+            absolute_residual_ns = abs(residual_ns)
+            segment_validation_residual_ns.append(absolute_residual_ns)
+            segment_validation_details.append({
+                "absolute_residual_ns": absolute_residual_ns,
+                "window_index": sample["window_index"],
+                "rtt_ns": sample["rtt_ns"],
+                "selected_count": sample["selected_count"],
+                "elapsed_seconds": (sample["monotonic_ns"] - segment_start_ns ) / 1_000_000_000,
+            })
+
+        worst_validation = max(
+            segment_validation_details,
+            key=lambda item: item["absolute_residual_ns"]
+        )
 
         segment_validation_p95_ns = statistics.quantiles(
             segment_validation_residual_ns,
@@ -277,6 +291,7 @@ if __name__== "__main__":
             "validation_p95_ns": segment_validation_p95_ns,
             "validation_max_ns": segment_validation_max_ns,
             "passed": segment_passed,
+            "worst_validation": worst_validation,
 
         })
 
@@ -531,3 +546,17 @@ if __name__== "__main__":
         f"Sesstion status: "
         f"{f'PASS' if session_passed else 'DEGRADED'}"
     )
+
+    print(f"Failed segment diagnostics: ")
+    for report in failed_segments:
+        worst = report["worst_validation"]
+
+        print(
+            f"segment={report['segment_index']} "
+            f"elapsed=[{worst['elapsed_seconds']:.1f}]s "
+            f"residual={ns_to_us(worst['absolute_residual_ns']):.3f}us "
+            f"rtt={ns_to_us(worst['rtt_ns']):.3f}us "
+            f"selected_count=[{worst['selected_count']} "
+            f"window={worst['window_index']}"
+        )
+
