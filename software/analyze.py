@@ -514,20 +514,20 @@ if __name__== "__main__":
             f"valid_max={ns_to_us(report['validation_max_ns']):+.3f}us"
             f"status={'Pass' if report['passed'] else 'Fail'}"
         )
-        print(
-            f"Piecewise passed segments: "
-            f"{len(passed_segments)} / {len(segment_reports)}"
-        )
+    print(
+        f"Piecewise passed segments: "
+        f"{len(passed_segments)} / {len(segment_reports)}"
+    )
 
-        print(
-            f"Failed segment index: "
-            f"{[
-                report['segment_index']
-                for report in failed_segments
-            ]}"
-        )
+    print(
+        f"Failed segment index: "
+        f"{[
+            report['segment_index']
+            for report in failed_segments
+        ]}"
+    )
 
-        print(
-            f"Sesstion status: "
-            f"{f'PASS' if session_passed else 'DEGRADED'}"
-        )
+    print(
+        f"Sesstion status: "
+        f"{f'PASS' if session_passed else 'DEGRADED'}"
+    )
