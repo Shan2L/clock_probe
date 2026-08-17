@@ -179,11 +179,11 @@ if __name__== "__main__":
     ):
         elapsed_seconds = (current["monotonic_ns"] - start_monotonic_ns) / 1_000_000_000
         interval_seconds = (current["monotonic_ns"] - previous["monotonic_ns"]) / 1_000_000_000
-        offset_jump_ns = (current["offset_ns"] - previous["offset_ns"]) / 1_000
+        offset_jump_us = (current["offset_ns"] - previous["offset_ns"]) / 1_000
         offset_jumps.append({
             "elapsed_seconds": elapsed_seconds,
             "interval_seconds": interval_seconds,
-            "offset_jump_ns": offset_jump_ns,
+            "offset_jump_us": offset_jump_us,
         })
 
     largest_jumps = sorted(
@@ -370,5 +370,5 @@ if __name__== "__main__":
         print(
             f" at={jump['elapsed_seconds']:.1f}s "
             f"interval={jump['interval_seconds']:.1f}s "
-            f"jump={jump['offset_jump_ns']:+.3f}us "
+            f"jump={jump['offset_jump_us']:+.3f}us "
         )
