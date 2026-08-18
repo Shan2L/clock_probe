@@ -10,6 +10,7 @@ from collections import deque
 from pathlib import Path
 from typing import Any
 
+from .clock_bridge import capture_clock_pair
 from .timestamping import (
     ANCILLARY_BUFFER_SIZE,
     create_timestamp_socket,
@@ -149,7 +150,8 @@ class TimestampProbeClient:
 
     def measure_once(self, sequence: int) -> dict[str, int | float]:
         """Perform one four-timestamp exchange."""
-        sample_monotonic_ns = time.monotonic_ns()
+        clock_pair = capture_clock_pair()
+        sample_monotonic_ns = clock_pair["bridge_monotonic_ns"]
         self._sock.sendto(
             _encode({"type": "request", "sequence": sequence}),
             self.reference,
@@ -186,6 +188,7 @@ class TimestampProbeClient:
         return {
             "sequence": sequence,
             "monotonic_ns": sample_monotonic_ns,
+            **clock_pair,
             "t1_ns": t1_ns,
             "t2_ns": t2_ns,
             "t3_ns": t3_ns,

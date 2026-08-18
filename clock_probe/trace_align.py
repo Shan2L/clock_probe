@@ -9,39 +9,16 @@ import os
 import re
 import sys
 from dataclasses import dataclass
-from decimal import Decimal
 from pathlib import Path
 from typing import Any, Callable
 
-BASE_TIME_PATTERN = re.compile(
-    r'(?P<prefix>"baseTimeNanoseconds"\s*:\s*)(?P<value>-?\d+)'
+from .chrome_trace import (
+    BASE_TIME_PATTERN,
+    TIMESTAMP_PATTERN,
+    microseconds_to_ns as _microseconds_to_ns,
+    ns_to_microseconds as _ns_to_microseconds,
 )
-TIMESTAMP_PATTERN = re.compile(
-    r'(?P<prefix>"ts"\s*:\s*)'
-    r'(?P<value>-?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)'
-)
-
-
-def _microseconds_to_ns(value: str) -> int:
-    """Parse the fixed-point microsecond values emitted by PyTorch."""
-    if "e" in value.lower():
-        return round(Decimal(value) * 1_000)
-
-    negative = value.startswith("-")
-    unsigned = value[1:] if negative else value
-    whole, separator, fraction = unsigned.partition(".")
-    whole_ns = int(whole or "0") * 1_000
-    fraction_digits = (fraction + "000")[:3] if separator else "000"
-    result = whole_ns + int(fraction_digits)
-    if separator and len(fraction) > 3 and fraction[3] >= "5":
-        result += 1
-    return -result if negative else result
-
-
-def _ns_to_microseconds(value_ns: int) -> str:
-    sign = "-" if value_ns < 0 else ""
-    whole, fraction = divmod(abs(value_ns), 1_000)
-    return f"{sign}{whole}.{fraction:03d}"
+from .clock_bridge import CompiledClockBridge
 
 
 def _model_identifiers(model: dict[str, Any]) -> set[str]:
@@ -137,10 +114,10 @@ class CompiledClockModel:  # pylint: disable=too-few-public-methods
         self,
         local_realtime_ns: int,
         local_monotonic_ns: int,
-    ) -> int:
-        """Convert local realtime to reference realtime."""
+    ) -> tuple[int, float]:
+        """Convert local realtime and return model uncertainty in microseconds."""
         if self.identity:
-            return local_realtime_ns
+            return local_realtime_ns, 0.0
 
         index = bisect.bisect_right(self.starts, local_monotonic_ns) - 1
         if index < 0:
@@ -164,7 +141,10 @@ class CompiledClockModel:  # pylint: disable=too-few-public-methods
         offset_ns = float(segment["offset_at_base_ns"]) + float(
             segment["drift_ns_per_ns"]
         ) * elapsed_ns
-        return round(local_realtime_ns + offset_ns)
+        return (
+            round(local_realtime_ns + offset_ns),
+            float(segment.get("uncertainty_us", 0.0)),
+        )
 
 
 @dataclass
@@ -179,19 +159,25 @@ class AlignmentStats:  # pylint: disable=too-many-instance-attributes
     timestamp_count: int
     first_source_monotonic_ns: int | None
     last_source_monotonic_ns: int | None
+    bridge_boot_id: str | None
+    max_bridge_uncertainty_us: float
+    max_total_uncertainty_us: float
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serializable summary."""
         return self.__dict__.copy()
 
 
-def align_trace_file(  # pylint: disable=too-many-locals,too-many-arguments
+# pylint: disable=too-many-locals,too-many-arguments
+# pylint: disable=too-many-statements,too-many-branches
+def align_trace_file(
     *,
     trace_path: Path,
     session_path: Path,
     source_node: str,
     output_path: Path,
-    target_base_time_ns: int = 0,
+    target_base_time_ns: int | None = None,
+    source_boot_id: str | None = None,
     progress: Callable[[int], None] | None = None,
 ) -> AlignmentStats:
     """Rewrite a PyTorch Trace without loading it into memory."""
@@ -201,7 +187,25 @@ def align_trace_file(  # pylint: disable=too-many-locals,too-many-arguments
         raise ValueError("Input and output Trace paths must differ")
 
     session = json.loads(session_path.read_text(encoding="utf-8"))
-    model = CompiledClockModel(select_clock_model(session, source_node))
+    if target_base_time_ns is None:
+        session_target_base = session.get("target_base_time_ns")
+        if session_target_base is None:
+            raise ValueError(
+                "Clock session has no common target_base_time_ns; "
+                "provide --target-base-time-ns explicitly"
+            )
+        target_base_time_ns = int(session_target_base)
+    selected_model = select_clock_model(session, source_node)
+    model = CompiledClockModel(selected_model)
+    bridge: CompiledClockBridge | None = None
+    if not model.identity:
+        bridge_payload = selected_model.get("realtime_monotonic_bridge")
+        if not isinstance(bridge_payload, dict):
+            raise ValueError(
+                "Clock model has no REALTIME-to-MONOTONIC bridge; "
+                "legacy sessions cannot safely align Kineto Trace timestamps"
+            )
+        bridge = CompiledClockBridge(bridge_payload)
     temporary_path = output_path.with_name(f".{output_path.name}.tmp")
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -209,23 +213,45 @@ def align_trace_file(  # pylint: disable=too-many-locals,too-many-arguments
     timestamp_count = 0
     first_monotonic_ns: int | None = None
     last_monotonic_ns: int | None = None
+    max_bridge_uncertainty_us = 0.0
+    max_total_uncertainty_us = 0.0
     inside_trace_events = False
 
     def replace_timestamp(match: re.Match[str]) -> str:
         nonlocal timestamp_count, first_monotonic_ns, last_monotonic_ns
+        nonlocal max_bridge_uncertainty_us, max_total_uncertainty_us
         if source_base_time_ns is None:
             raise ValueError("Trace timestamp appeared before baseTimeNanoseconds")
-        monotonic_ns = _microseconds_to_ns(match.group("value"))
-        local_realtime_ns = source_base_time_ns + monotonic_ns
-        aligned_realtime_ns = model.align_realtime_ns(
+        trace_relative_ns = _microseconds_to_ns(match.group("value"))
+        local_realtime_ns = source_base_time_ns + trace_relative_ns
+        bridge_uncertainty_us = 0.0
+        if bridge is None:
+            local_monotonic_ns = 0
+        else:
+            local_monotonic_ns, bridge_uncertainty_us = (
+                bridge.realtime_to_monotonic_ns(
+                    local_realtime_ns,
+                    expected_boot_id=source_boot_id,
+                )
+            )
+        aligned_realtime_ns, model_uncertainty_us = model.align_realtime_ns(
             local_realtime_ns,
-            monotonic_ns,
+            local_monotonic_ns,
         )
         aligned_trace_ns = aligned_realtime_ns - target_base_time_ns
         timestamp_count += 1
-        if first_monotonic_ns is None:
-            first_monotonic_ns = monotonic_ns
-        last_monotonic_ns = monotonic_ns
+        if bridge is not None:
+            if first_monotonic_ns is None:
+                first_monotonic_ns = local_monotonic_ns
+            last_monotonic_ns = local_monotonic_ns
+        max_bridge_uncertainty_us = max(
+            max_bridge_uncertainty_us,
+            bridge_uncertainty_us,
+        )
+        max_total_uncertainty_us = max(
+            max_total_uncertainty_us,
+            bridge_uncertainty_us + model_uncertainty_us,
+        )
         if progress is not None and timestamp_count % 1_000_000 == 0:
             progress(timestamp_count)
         return match.group("prefix") + _ns_to_microseconds(aligned_trace_ns)
@@ -287,6 +313,9 @@ def align_trace_file(  # pylint: disable=too-many-locals,too-many-arguments
         timestamp_count=timestamp_count,
         first_source_monotonic_ns=first_monotonic_ns,
         last_source_monotonic_ns=last_monotonic_ns,
+        bridge_boot_id=bridge.boot_id if bridge is not None else None,
+        max_bridge_uncertainty_us=max_bridge_uncertainty_us,
+        max_total_uncertainty_us=max_total_uncertainty_us,
     )
 
 
@@ -308,8 +337,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--target-base-time-ns",
         type=int,
-        default=0,
-        help="Common output base; zero produces absolute epoch microseconds.",
+        default=None,
+        help=(
+            "Common output base; defaults to the precision-safe base stored "
+            "in the clock session."
+        ),
+    )
+    parser.add_argument(
+        "--source-boot-id",
+        help=(
+            "Optional source-node boot ID captured with the Trace; a mismatch "
+            "rejects alignment."
+        ),
     )
     parser.add_argument("--quiet", action="store_true")
     return parser
@@ -331,6 +370,7 @@ def main() -> None:
             source_node=args.source_node,
             output_path=args.output,
             target_base_time_ns=args.target_base_time_ns,
+            source_boot_id=args.source_boot_id,
             progress=progress,
         )
     except (OSError, ValueError, json.JSONDecodeError) as error:

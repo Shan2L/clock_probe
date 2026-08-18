@@ -48,6 +48,17 @@ class ContinuousProbeCollectorTest(unittest.TestCase):
                 )
                 self.assertEqual(final_status["failed_sample_count"], 0)
                 self.assertIsNone(final_status["fatal_error"])
+                self.assertTrue(
+                    all(
+                        {
+                            "bridge_monotonic_ns",
+                            "bridge_realtime_ns",
+                            "bridge_offset_ns",
+                            "bridge_read_span_ns",
+                        }.issubset(sample)
+                        for sample in samples
+                    )
+                )
                 self.assertEqual(
                     len(output_path.read_text(encoding="utf-8").splitlines()),
                     len(samples),

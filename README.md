@@ -108,6 +108,7 @@ clock-probe-ray start --reference-host 10.67.91.123
 - Head identity model（offset 恒为 0）；
 - 每个非 Head 节点的 piecewise affine model；
 - 每段的 offset、drift ppm、有效 CLOCK_MONOTONIC 范围；
+- 每个非 Head 节点的 REALTIME↔MONOTONIC 分段桥和 boot ID；
 - held-out validation p95/max error；
 - RTT、coverage、uncertainty 和 PASS/FAIL；
 - 节点失败信息。
@@ -142,6 +143,7 @@ clock-probe-align \
   --trace trace_rank0.json \
   --clock-session profile-clock-session.json \
   --source-node cse-ai-9 \
+  --source-boot-id "$(cat /proc/sys/kernel/random/boot_id)" \
   --output trace_rank0.aligned.json
 
 clock-probe-align \
@@ -151,7 +153,67 @@ clock-probe-align \
   --output trace_rank4.aligned.json
 ```
 
-转换器逐行处理超大 Trace，不会把完整 JSON 加载到内存。输出统一设置
-`baseTimeNanoseconds=0`，事件 `ts` 为对齐到 Head 后的 epoch 微秒，因此不同节点
-输出可以使用同一个时间基准合并。若事件超出模型覆盖范围，转换会失败并删除不完整
-输出，不会静默外推。
+Kineto 的 `ts` 是相对 `baseTimeNanoseconds` 的微秒偏移，不是
+`CLOCK_MONOTONIC`。转换器先重建本机事件时间，再经会话中的本机时钟桥反算
+事件对应的 `CLOCK_MONOTONIC`，最后选择 Clock Probe 模型分段：
+
+```text
+local_realtime = baseTimeNanoseconds + ts * 1000
+local_monotonic = realtime_monotonic_bridge(local_realtime)
+head_realtime = local_realtime + clock_probe_offset(local_monotonic)
+```
+
+Worker 的旧版 schema 1 会话没有时钟桥，因此会被拒绝。若采集 Trace 时保存了
+源节点 boot ID，建议通过 `--source-boot-id` 传入；与会话不一致时转换直接失败。
+
+转换器逐行处理超大 Trace，不会把完整 JSON 加载到内存。输出统一使用会话中的
+`target_base_time_ns`，事件 `ts` 为对齐到 Head 后相对该公共基准的微秒偏移。
+这样不同节点可以直接合并，同时避免把绝对 epoch 写入浮点 `ts` 导致精度损失。
+若事件超出桥或模型覆盖范围，转换会失败并删除不完整输出，不会静默外推。
+
+## NCCL 校验、CLC、raw/aligned 报告
+
+仿射对齐之后用三个独立 CLI。它们不参与 Clock Probe 拟合。
+
+1. 校验（只读，held-out）：
+
+```bash
+clock-probe-nccl-check \
+  --trace 0:trace_rank0.aligned.json \
+  --trace 4:trace_rank4.aligned.json \
+  --clock-session profile-clock-session.json \
+  --output nccl-check.json
+```
+
+也可以用 `--uncertainty-us` 代替 `--clock-session`。隐式同步 collective（allgather / allreduce / reducescatter / alltoall / barrier）若出现 `end_i < start_j`，记为 inversion。缺口 ≤ uncertainty 为 WARNING，大于则为 FAIL（退出码 2）。FAIL 时 aligned Trace 只能当候选，不要跑 CLC。
+
+2. 受限 CLC（第三份文件，不覆盖 aligned）：
+
+```bash
+clock-probe-clc \
+  --trace 0:trace_rank0.aligned.json \
+  --trace 4:trace_rank4.aligned.json \
+  --output 0:trace_rank0.clc.json \
+  --output 4:trace_rank4.clc.json \
+  --check nccl-check.json \
+  --report clc-report.json
+```
+
+只把结束得过早的 rank 往后推到最晚的 start；不把 straggler 拉回来。PASS 或没有可修 inversion 时不写 Trace。
+
+3. 路径契约：
+
+```bash
+clock-probe-report \
+  --raw 0:trace_rank0.json \
+  --raw 4:trace_rank4.json \
+  --aligned 0:trace_rank0.aligned.json \
+  --aligned 4:trace_rank4.aligned.json \
+  --clc 0:trace_rank0.clc.json \
+  --clc 4:trace_rank4.clc.json \
+  --nccl-check nccl-check.json \
+  --clc-report clc-report.json \
+  --output clock-report.json
+```
+
+raw、aligned、CLC 必须是不同文件。`primary_timeline` 在 PASS 时为 aligned，WARNING 且 CLC 已应用时为 clc，FAIL 时为 none。

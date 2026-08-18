@@ -335,22 +335,18 @@ def apply_clock_model(
     local_timestamp_ns: int,
     model: dict[str, Any],
     *,
-    local_monotonic_ns: int | None = None,
+    local_monotonic_ns: int,
     allow_failed_segment: bool = False,
 ) -> int:
     """Convert a source timestamp to the reference clock domain.
 
-    ``local_monotonic_ns`` selects the segment and evaluates drift. It may be
-    omitted only when ``local_timestamp_ns`` itself is CLOCK_MONOTONIC.
+    ``local_monotonic_ns`` explicitly selects the segment and evaluates drift;
+    callers must never substitute a timestamp from another clock domain.
     """
     if model.get("model_type") == "identity":
         return local_timestamp_ns
 
-    point_ns = (
-        local_timestamp_ns
-        if local_monotonic_ns is None
-        else local_monotonic_ns
-    )
+    point_ns = local_monotonic_ns
     candidates = [
         segment
         for segment in model.get("segments", [])

@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .clock_bridge import build_clock_bridge, read_boot_id
 from .model import ModelConfig, build_piecewise_model
 from .network import (
     list_network_interfaces,
@@ -37,12 +38,19 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _trace_base_time_ns() -> int:
+    """Return one hour-aligned Unix base shared by aligned Trace files."""
+    hour_ns = 3_600_000_000_000
+    return time.time_ns() // hour_ns * hour_ns
+
+
 def _node_identity(node: dict[str, Any]) -> dict[str, Any]:
     return {
         "ray_node_id": node["node_id"],
         "ray_node_name": node["name"],
         "ray_node_address": node["address"],
         "hostname": socket.gethostname(),
+        "boot_id": read_boot_id(),
     }
 
 
@@ -176,7 +184,7 @@ class ClockNodeAgent:  # pylint: disable=too-many-instance-attributes
         if self.server is None:
             raise RuntimeError("Only the reference agent has an identity model")
         model = {
-            "schema_version": 1,
+            "schema_version": 2,
             "model_type": "identity",
             "offset_direction": "reference_minus_source",
             "timestamp_domain": "CLOCK_MONOTONIC",
@@ -186,6 +194,13 @@ class ClockNodeAgent:  # pylint: disable=too-many-instance-attributes
             "roles": ["ray_head", "ray_worker", "clock_reference"],
             "network": self.selected_route,
             "segments": [],
+            "realtime_monotonic_bridge": {
+                "schema_version": 1,
+                "model_type": "identity_not_required",
+                "boot_id": self.identity["boot_id"],
+                "status": "PASS",
+                "segments": [],
+            },
         }
         model["model_path_on_node"] = self._persist_model(model)
         return model
@@ -232,6 +247,11 @@ class ClockNodeAgent:  # pylint: disable=too-many-instance-attributes
             source=source_identity,
             reference=self.reference_identity,
             config=ModelConfig(**model_config),
+        )
+        model["schema_version"] = 2
+        model["realtime_monotonic_bridge"] = build_clock_bridge(
+            samples,
+            boot_id=str(self.identity["boot_id"]),
         )
         model["roles"] = ["ray_worker"]
         model["network"] = self.selected_route
@@ -295,6 +315,11 @@ class ClockNodeAgent:  # pylint: disable=too-many-instance-attributes
             source=source_identity,
             reference=self.reference_identity,
             config=self.continuous_model_config,
+        )
+        model["schema_version"] = 2
+        model["realtime_monotonic_bridge"] = build_clock_bridge(
+            samples,
+            boot_id=str(self.identity["boot_id"]),
         )
         model["roles"] = ["ray_worker"]
         model["network"] = self.selected_route
@@ -579,10 +604,11 @@ class ClockCalibrationCoordinator:  # pylint: disable=too-many-instance-attribut
             model for model in models if model.get("status") != "PASS"
         ]
         return {
-            "schema_version": 1,
+            "schema_version": 2,
             "session_id": self.session_id,
             "started_at": self.started_at,
             "completed_at": _utc_now(),
+            "target_base_time_ns": _trace_base_time_ns(),
             "status": (
                 "PASS" if not failures and not failed_models else "FAIL"
             ),
@@ -742,10 +768,11 @@ def run_calibration(args: argparse.Namespace) -> dict[str, Any]:
             if model.get("status") != "PASS"
         ]
         session = {
-            "schema_version": 1,
+            "schema_version": 2,
             "session_id": session_id,
             "started_at": session_started_at,
             "completed_at": _utc_now(),
+            "target_base_time_ns": _trace_base_time_ns(),
             "status": (
                 "PASS"
                 if not failures and not failed_models

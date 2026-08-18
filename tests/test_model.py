@@ -50,7 +50,11 @@ class PiecewiseModelTest(unittest.TestCase):
         )
 
         point_ns = 1_010_000_000_000
-        aligned_ns = apply_clock_model(point_ns, model)
+        aligned_ns = apply_clock_model(
+            point_ns,
+            model,
+            local_monotonic_ns=point_ns,
+        )
         self.assertAlmostEqual(
             aligned_ns - point_ns,
             145_000,
@@ -99,7 +103,7 @@ class PiecewiseModelTest(unittest.TestCase):
             reference={"hostname": "head"},
         )
         with self.assertRaises(ValueError):
-            apply_clock_model(999, model)
+            apply_clock_model(999, model, local_monotonic_ns=999)
 
 
 if __name__ == "__main__":
