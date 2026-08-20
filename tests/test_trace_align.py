@@ -5,11 +5,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from clock_probe.clock_bridge import build_clock_bridge
-from clock_probe.model import build_piecewise_model
-from clock_probe.trace_align import align_trace_file
+from clock_probe.calibration.clock_bridge import build_clock_bridge
+from clock_probe.calibration.software import build_piecewise_model
+from clock_probe.calibration.phc_bridge import build_phc_bridge
+from clock_probe.postprocess.align import align_trace_file
 from test_clock_bridge import synthetic_bridge_samples
 from test_model import synthetic_samples
+from test_phc import synthetic_phc_samples
 
 
 def write_trace(path: Path, base_time_ns: int, timestamps_us: list[str]) -> None:
@@ -268,6 +270,91 @@ class TraceAlignmentTest(unittest.TestCase):
                     source_node="worker-a",
                     output_path=output_path,
                     source_boot_id="boot-b",
+                )
+            self.assertFalse(output_path.exists())
+
+    def test_aligns_hardware_trace_to_phc_domain(self) -> None:
+        samples = synthetic_phc_samples(duration_seconds=30)
+        bridge = build_phc_bridge(samples, boot_id="boot-a")
+        event = samples[100]
+        target_base_ns = 1_700_000_000_000_000_000
+        session = {
+            "clock_source": "ptp_hardware",
+            "timestamp_domain": "PHC",
+            "target_base_time_ns": target_base_ns,
+            "ptp": {"uncertainty_us": 0.32},
+            "models": [
+                {
+                    "model_type": "phc_bridge",
+                    "status": "PASS",
+                    "source": {"hostname": "cse-ai-6"},
+                    "ptp_uncertainty_us": 0.32,
+                    "realtime_phc_bridge": bridge,
+                }
+            ],
+        }
+        trace_relative_ns = 5_000_000_000
+        source_base_ns = event["bridge_realtime_ns"] - trace_relative_ns
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            trace_path = root / "trace.json"
+            session_path = root / "session.json"
+            output_path = root / "aligned.json"
+            write_trace(trace_path, source_base_ns, ["5000000.000"])
+            session_path.write_text(json.dumps(session), encoding="utf-8")
+
+            stats = align_trace_file(
+                trace_path=trace_path,
+                session_path=session_path,
+                source_node="cse-ai-6",
+                output_path=output_path,
+                source_boot_id="boot-a",
+            )
+            aligned = json.loads(output_path.read_text(encoding="utf-8"))
+
+        mapped_phc_ns = stats.first_source_phc_ns
+        self.assertIsNotNone(mapped_phc_ns)
+        self.assertEqual(stats.clock_source, "ptp_hardware")
+        self.assertAlmostEqual(mapped_phc_ns, event["bridge_phc_ns"], delta=1_000)
+        self.assertEqual(aligned["baseTimeNanoseconds"], target_base_ns)
+        self.assertAlmostEqual(
+            aligned["traceEvents"][0]["ts"],
+            (mapped_phc_ns - target_base_ns) / 1_000,
+            delta=1.0,
+        )
+        self.assertGreaterEqual(stats.max_total_uncertainty_us, 0.32)
+        self.assertLess(stats.max_total_uncertainty_us, 1.5)
+
+    def test_rejects_hardware_session_without_phc_domain(self) -> None:
+        session = {
+            "clock_source": "ptp_hardware",
+            "timestamp_domain": "CLOCK_REALTIME",
+            "target_base_time_ns": 0,
+            "models": [
+                {
+                    "model_type": "phc_bridge",
+                    "status": "PASS",
+                    "source": {"hostname": "cse-ai-6"},
+                    "realtime_phc_bridge": build_phc_bridge(
+                        synthetic_phc_samples(duration_seconds=30),
+                        boot_id="boot-a",
+                    ),
+                }
+            ],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            trace_path = root / "trace.json"
+            session_path = root / "session.json"
+            output_path = root / "aligned.json"
+            write_trace(trace_path, 10_000, ["1.000"])
+            session_path.write_text(json.dumps(session), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "timestamp_domain=PHC"):
+                align_trace_file(
+                    trace_path=trace_path,
+                    session_path=session_path,
+                    source_node="cse-ai-6",
+                    output_path=output_path,
                 )
             self.assertFalse(output_path.exists())
 

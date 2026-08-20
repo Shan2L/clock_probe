@@ -1,3 +1,14 @@
 __pycache__/
 *.py[cod]
 *.egg-info/
+.venv/
+build/
+dist/
+runs/
+*.pt.trace.json
+*.aligned.json
+*.clc.json
+clock-session*.json
+clock-report*.json
+nccl-check*.json
+clc-report*.json

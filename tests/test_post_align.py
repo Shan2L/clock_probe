@@ -7,9 +7,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from clock_probe.clc import apply_clc, plan_kernel_shifts
-from clock_probe.nccl_check import check_nccl_traces, extract_nccl_kernels, match_collectives
-from clock_probe.report import build_clock_report
+from clock_probe.postprocess.clc import apply_clc, plan_kernel_shifts
+from clock_probe.postprocess.nccl import check_nccl_traces, extract_nccl_kernels, match_collectives
+from clock_probe.postprocess.report import build_clock_report
 
 
 def write_nccl_trace(
@@ -468,6 +468,10 @@ class CLCTest(unittest.TestCase):
         )
         self.assertEqual(report.status, "SKIPPED")
 
+    def test_rejects_unknown_check_status(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Unknown NCCL check status"):
+            apply_clc({}, {}, uncertainty_us=5.0, check_status="UNKNOWN")
+
 
 class ClockReportTest(unittest.TestCase):
     """Raw / aligned / CLC paths stay distinct."""
@@ -515,6 +519,58 @@ class ClockReportTest(unittest.TestCase):
                     clc=None,
                     nccl_check_path=check_path,
                     clc_report_path=None,
+                )
+
+    def test_rejects_unknown_nccl_status(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            raw = root / "rank0.json"
+            aligned = root / "rank0.aligned.json"
+            raw.write_text("{}", encoding="utf-8")
+            aligned.write_text("{}", encoding="utf-8")
+            check_path = root / "nccl-check.json"
+            check_path.write_text(
+                json.dumps({"status": "UNKNOWN"}),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "Unknown NCCL check status"):
+                build_clock_report(
+                    raw={0: raw},
+                    aligned={0: aligned},
+                    clc=None,
+                    nccl_check_path=check_path,
+                    clc_report_path=None,
+                )
+
+    def test_clc_primary_requires_every_rank(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            raw = {}
+            aligned = {}
+            for rank in (0, 1):
+                raw[rank] = root / f"rank{rank}.json"
+                aligned[rank] = root / f"rank{rank}.aligned.json"
+                raw[rank].write_text("{}", encoding="utf-8")
+                aligned[rank].write_text("{}", encoding="utf-8")
+            clc0 = root / "rank0.clc.json"
+            clc0.write_text("{}", encoding="utf-8")
+            check_path = root / "nccl-check.json"
+            check_path.write_text(
+                json.dumps({"status": "WARNING"}),
+                encoding="utf-8",
+            )
+            clc_report = root / "clc-report.json"
+            clc_report.write_text(
+                json.dumps({"status": "APPLIED"}),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "every rank"):
+                build_clock_report(
+                    raw=raw,
+                    aligned=aligned,
+                    clc={0: clc0},
+                    nccl_check_path=check_path,
+                    clc_report_path=clc_report,
                 )
 
 

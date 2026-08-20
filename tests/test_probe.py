@@ -6,7 +6,7 @@ import time
 import unittest
 from pathlib import Path
 
-from clock_probe.probe import ContinuousProbeCollector, TimestampProbeServer
+from clock_probe.sampling.probe import ContinuousProbeCollector, TimestampProbeServer
 
 
 def unused_udp_port() -> int:

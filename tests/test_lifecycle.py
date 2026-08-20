@@ -7,7 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from clock_probe.ray_agent import (
+from clock_probe.execution.ray import (
     _get_active_coordinator,
     start_manual_calibration,
     stop_manual_calibration,
@@ -73,7 +73,7 @@ class ManualLifecycleTest(unittest.TestCase):
         )
         with (
             patch(
-                "clock_probe.ray_agent._connect_ray",
+                "clock_probe.execution.ray._connect_ray",
                 return_value=fake_ray,
             ),
             self.assertRaisesRegex(RuntimeError, "already active"),
@@ -95,7 +95,7 @@ class ManualLifecycleTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             output_path = Path(directory) / "session.json"
             with patch(
-                "clock_probe.ray_agent._connect_ray",
+                "clock_probe.execution.ray._connect_ray",
                 return_value=fake_ray,
             ):
                 result = stop_manual_calibration(

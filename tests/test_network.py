@@ -5,7 +5,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from clock_probe.network import (
+from clock_probe.execution.network import (
     InterfaceAddress,
     NetworkInterface,
     parse_timestamping_capabilities,
@@ -70,7 +70,7 @@ Capabilities:
                 strict=True,
             )
 
-    @patch("clock_probe.network.subprocess.run")
+    @patch("clock_probe.execution.network.subprocess.run")
     def test_route_requires_capable_output_interface(self, run_mock) -> None:
         run_mock.return_value = SimpleNamespace(
             stdout=(
@@ -95,7 +95,7 @@ Capabilities:
         )
 
     @patch(
-        "clock_probe.network.subprocess.run",
+        "clock_probe.execution.network.subprocess.run",
         side_effect=subprocess.CalledProcessError(2, "ip"),
     )
     def test_route_lookup_failure_is_reported(self, _run_mock) -> None:

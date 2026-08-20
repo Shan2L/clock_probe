@@ -1,5 +1,5 @@
-"""Module entry point for ``python -m clock_probe``."""
+"""Single module entry point for Clock Probe."""
 
-from .ray_agent import main
+from .cli import main
 
 main()

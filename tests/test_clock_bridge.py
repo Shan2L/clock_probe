@@ -2,7 +2,7 @@
 
 import unittest
 
-from clock_probe.clock_bridge import (
+from clock_probe.calibration.clock_bridge import (
     ClockBridgeConfig,
     CompiledClockBridge,
     build_clock_bridge,
@@ -121,6 +121,43 @@ class ClockBridgeTest(unittest.TestCase):
             compiled.realtime_to_monotonic_ns(
                 samples[249]["bridge_realtime_ns"] + 2_000_000
             )
+
+    def test_fills_interior_realtime_stitch_gap(self) -> None:
+        def segment(
+            index: int,
+            realtime_from: int,
+            realtime_to: int,
+            monotonic_from: int,
+            monotonic_to: int,
+        ) -> dict:
+            return {
+                "segment_index": index,
+                "status": "PASS",
+                "valid_from_realtime_ns": realtime_from,
+                "valid_to_realtime_ns": realtime_to,
+                "valid_from_monotonic_ns": monotonic_from,
+                "valid_to_monotonic_ns": monotonic_to,
+                "base_monotonic_ns": monotonic_from,
+                "offset_at_base_ns": realtime_from - monotonic_from,
+                "drift_ns_per_ns": 0.0,
+                "uncertainty_us": 1.0,
+            }
+
+        compiled = CompiledClockBridge(
+            {
+                "status": "PASS",
+                "boot_id": "boot-a",
+                "segments": [
+                    segment(0, 1_000, 2_000, 0, 1_000),
+                    segment(1, 5_000, 6_000, 1_001, 2_000),
+                ],
+            }
+        )
+        mapped, uncertainty_us = compiled.realtime_to_monotonic_ns(2_500)
+        self.assertEqual(mapped, 1_000)
+        self.assertEqual(uncertainty_us, 1.0)
+        with self.assertRaisesRegex(ValueError, "No clock-bridge segment"):
+            compiled.realtime_to_monotonic_ns(1_000_000)
 
     def test_rejects_boot_id_mismatch(self) -> None:
         bridge = build_clock_bridge(

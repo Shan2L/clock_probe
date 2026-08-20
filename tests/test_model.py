@@ -1,8 +1,9 @@
 import unittest
 
-from clock_probe.model import (
+from clock_probe.calibration.software import (
     ModelConfig,
     apply_clock_model,
+    build_clock_model,
     build_piecewise_model,
 )
 
@@ -104,6 +105,54 @@ class PiecewiseModelTest(unittest.TestCase):
         )
         with self.assertRaises(ValueError):
             apply_clock_model(999, model, local_monotonic_ns=999)
+
+    def test_builds_held_out_interpolated_model(self) -> None:
+        model = build_clock_model(
+            synthetic_samples(duration_seconds=180),
+            source={"hostname": "worker-a"},
+            reference={"hostname": "head"},
+            config=ModelConfig(
+                window_seconds=20,
+                samples_per_window=2,
+                model_method="interpolation",
+            ),
+        )
+        point_ns = 1_030_000_000_000
+        aligned_ns = apply_clock_model(
+            point_ns,
+            model,
+            local_monotonic_ns=point_ns,
+        )
+        self.assertEqual(model["model_type"], "interpolated_offset")
+        self.assertEqual(model["status"], "PASS")
+        self.assertGreater(model["health"]["validation_sample_count"], 0)
+        self.assertAlmostEqual(
+            aligned_ns - point_ns,
+            185_000,
+            delta=1_000,
+        )
+
+    def test_auto_selects_with_unseen_time_validation(self) -> None:
+        model = build_clock_model(
+            synthetic_samples(duration_seconds=300),
+            source={"hostname": "worker-a"},
+            reference={"hostname": "head"},
+            config=ModelConfig(
+                model_method="auto",
+                candidate_window_seconds=(5.0, 10.0, 20.0),
+                candidate_samples_per_window=(1, 2),
+                candidate_rtt_slack_us=(10.0,),
+                candidate_segment_seconds=(15.0, 30.0),
+            ),
+        )
+        selection = model["model_selection"]
+        self.assertEqual(model["status"], "PASS")
+        self.assertEqual(selection["mode"], "auto")
+        self.assertEqual(selection["validation_status"], "PASS")
+        self.assertGreater(selection["validation_sample_count"], 0)
+        self.assertTrue(
+            any(candidate["status"] == "PASS" for candidate in selection["candidates"])
+        )
 
 
 if __name__ == "__main__":

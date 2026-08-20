@@ -1,6 +1,6 @@
 import unittest
 
-from clock_probe.ray_topology import discover_alive_nodes, get_head_node
+from clock_probe.execution.topology import discover_alive_nodes, get_head_node
 
 
 class RayTopologyTest(unittest.TestCase):

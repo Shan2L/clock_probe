@@ -1,5 +1,8 @@
 .git/
 .venv/
+runs/
+build/
+dist/
 __pycache__/
 *.pyc
 *.jsonl

@@ -1,25 +1,16 @@
 [project]
 name = "clock-probe"
 version = "0.1.0"
-description = "Cross-node software clock calibration for Ray GPU clusters"
+description = "Cross-node software and PHC Trace clock calibration"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = [
-    "pylint>=4.0.7",
-]
+dependencies = []
 
 [project.optional-dependencies]
 ray = ["ray"]
-presentation = [
-    "python-pptx>=1.0.2",
-]
 
 [project.scripts]
-clock-probe-ray = "clock_probe.ray_agent:main"
-clock-probe-align = "clock_probe.trace_align:main"
-clock-probe-nccl-check = "clock_probe.nccl_check:main"
-clock-probe-clc = "clock_probe.clc:main"
-clock-probe-report = "clock_probe.report:main"
+clock-probe = "clock_probe.cli:main"
 
 [build-system]
 requires = ["setuptools"]
@@ -27,3 +18,6 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["clock_probe*"]
+
+[tool.setuptools.data-files]
+"share/clock-probe/ptp" = ["configs/ptp/*.conf"]
